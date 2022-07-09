@@ -1,9 +1,7 @@
 from astropy.timeseries import LombScargle
 import numpy as np
 import pandas as pd
-%matplotlib inline
 import matplotlib.pyplot as plt
-import numpy as np
 import time
 from astropy.io import fits, ascii
 from astropy.table import Table, vstack
