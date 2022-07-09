@@ -43,7 +43,7 @@ def scale_amplitude(x_mag,q_rms):
 
 # Load data file. The data below is specific to MeerLICHT data. 
 # You can change it to your own data.
-df=pd.read_csv('meerzicht_fullsource_show_runcat_20220412T144610.csv')
+df=pd.read_csv('31112167.csv')
 
 passbands = ['q','u','i'] # define filters to use
 
