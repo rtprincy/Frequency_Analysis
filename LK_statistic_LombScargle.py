@@ -91,8 +91,6 @@ print('Number of trial frequencies: ', frequencies.size)
 
 # No python version for theta_kl for faster run
 theta_jit = numba.jit(nopython=True)(theta_lk) 
-theta_compile=theta_jit(np.array([0.2,0.1]),df[mag_col].values,data[mag_err_col].values,
-df[mjd_col].values) # Just to compile the code with few periods to save time for the next run
 
 # Compute Lomb-Scargle periodogram
 t_lsp0=time.time()
