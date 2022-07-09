@@ -41,7 +41,8 @@ def scale_amplitude(x_mag,q_rms):
     x_scaled= x_scaled - np.median(x_scaled)
     return x_scaled
 
-# Load data file  
+# Load data file. The data below is specific to MeerLICHT data. 
+# You can change it to your own data.
 df=pd.read_csv('/Users/princy/Downloads/meerzicht_fullsource_show_runcat_20220608T221630.csv')
 
 passbands = ['q','u','i'] # define filters to use
