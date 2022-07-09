@@ -7,19 +7,19 @@ import numpy as np
 import time
 from astropy.io import fits, ascii
 from astropy.table import Table, vstack
-
+import numba
 
 def theta_lk(periods,mag,magerr,mjd):
-    theta_array=np.zeros_like(periods)
-    i=0
-    for p in periods:
-        xp=(mjd/p)%1
-        idx=np.argsort(xp)
+    theta_array=np.zeros(periods.size)
+    for p in range(periods.size):
+        phi=(mjd/periods[p])
+        nphi = phi.astype(np.int64)  
+        phi = phi - nphi
+        idx=np.argsort(phi)
         m=mag[idx]
         merr=magerr[idx]
         w=1/(merr[1:]**2 + merr[:-1]**2)
-        theta_array[i]=np.sum(w*(m[1:] - m[:-1])**2)/(np.sum((m[1:]-np.mean(m[1:]))**2)*np.sum(w))
-        i+=1
+        theta_array[p]=np.sum(w*(m[1:] - m[:-1])**2)/(np.sum((m[1:]-np.mean(m[1:]))**2)*np.sum(w))
     return theta_array
   
 def freq_grid(times,oversample_factor=5,f0=None,fn=None):
@@ -89,6 +89,11 @@ periods=1/frequencies
 
 print('Number of trial frequencies: ', frequencies.size)
 
+# No python version for theta_kl for faster run
+theta_jit = numba.jit(nopython=True)(theta_lk) 
+theta_compile=theta_jit(np.array([0.2,0.1]),df[mag_col].values,data[mag_err_col].values,
+df[mjd_col].values) # Just to compile the code with few periods to save time for the next run
+
 # Compute Lomb-Scargle periodogram
 t_lsp0=time.time()
 
@@ -101,7 +106,7 @@ t_lsp1=time.time()
 # Compute LK statistic Theta
 t_theta0=time.time()
 
-theta=theta_lk(periods,ymulti,dymulti,xmulti)
+theta=theta_jit(periods,ymulti,dymulti,xmulti)
 
 t_theta1=time.time()
 
