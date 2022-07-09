@@ -137,7 +137,7 @@ uphase=(umjd/period_est.round(5))%1
 iphase=(imjd/period_est.round(5))%1
 
 
-# Simple phase plot. You can still optimize and improve it according to your needs.
+# Simple phase plot. You can still optimize and improve it.
 plt.figure(figsize=[8,12])
 
 plt.subplot(211)
