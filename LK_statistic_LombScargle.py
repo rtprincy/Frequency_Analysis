@@ -21,6 +21,7 @@ def theta_lk(periods,mag,magerr,mjd):
     return theta_array
   
 def freq_grid(times,oversample_factor=5,f0=None,fn=None):
+    times=np.sort(times)
     df = 1.0 / (times.max() - times.min())
     if f0 is None:
         f0 = df
