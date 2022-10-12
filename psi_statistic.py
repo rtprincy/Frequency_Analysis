@@ -87,14 +87,6 @@ filtered_data.columns=['ID', 'RA_IN', 'DEC_IN']
 
 # In[13]:
 
-
-#Select first 10 to compute in this machine, the rest in other machines
-
-
-
-# In[ ]:
-
-
 passbands = ['q','u','i']
 # Define ML column's name
 mjd_col='MJD-OBS'
@@ -166,9 +158,6 @@ for i,(ra, dec) in enumerate(filtered_data[['RA_IN','DEC_IN']].values):
     np.save(save_to_path+'theta/'+'%s_%s_%sv2.npy.npy'%(str(ra),str(dec),str(idx[i])),theta)
     # np.save('periodogram_files/oversample_10/lspw_%s_1term.npy'%(elt),np.vstack([frequencies,lspw]))
     # # np.save('periodogram_files/thetaw_%s.npy'%(elt))
-
-
-# In[ ]:
 
 
 
