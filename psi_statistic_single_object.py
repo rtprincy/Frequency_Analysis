@@ -19,15 +19,24 @@ def theta_lk(periods,mag,magerr,mjd):
         w=1/(merr[1:]**2 + merr[:-1]**2)
         theta_array[p]=np.sum(w*(m[1:] - m[:-1])**2)/(np.sum((m[1:]-np.mean(m[1:]))**2)*np.sum(w))
     return theta_array
-  
-def freq_grid(times,oversample_factor=5,f0=None,fn=None):
+# Old frequency grid
+# def freq_grid(times,oversample_factor=5,f0=None,fn=None):
+#     times=np.sort(times)
+#     df = 1.0 / (times.max() - times.min())
+#     if f0 is None:
+#         f0 = df
+#     if fn is None:
+#         fn = 0.5 / np.median(np.diff(times)) 
+#     return np.arange(f0, fn, df / oversample_factor)
+
+def freq_grid(times,oversample_factor=10,f0=None,fn=None):
     times=np.sort(times)
-    df = 1.0 / (times.max() - times.min())
+    df = 1 / oversample_factor * (times.max() - times.min())
     if f0 is None:
-        f0 = df
+        f0 = 4.0 / (times.max() - times.min())
     if fn is None:
-        fn = 0.5 / np.median(np.diff(times)) 
-    return np.arange(f0, fn, df / oversample_factor)
+        fn = 480
+    return np.arange(f0, fn, df)
   
 def compute_rms(x_mag):
     return np.sqrt(sum(x_mag**2)/x_mag.size)
