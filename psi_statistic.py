@@ -47,11 +47,8 @@ def theta_f(periods,mag,magerr,mjd):
 #New freq_grid
 def freq_grid(times,oversample_factor=10,f0=None,fn=None):
     times=np.sort(times)
-    df = 4.0 / (times.max() - times.min())
-    if f0 is None:
-        f0 = df
-    if fn is None:
-        fn = 0.5 / np.median(np.diff(times)) 
+    df = 1 / (times.max() - times.min())
+    f0 = 4.0 / (times.max() - times.min())
     return np.arange(f0, 480, df / oversample_factor)
 
 # In[4]:
