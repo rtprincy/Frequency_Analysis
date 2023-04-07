@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
-
-
 from astropy.timeseries import LombScargle
 import numpy as np
 import pandas as pd
@@ -11,9 +8,52 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 import numba
-save_to_path='periodogram_files_v2/'
+from astropy.io import fits, ascii
+from astropy.table import Table, vstack
+import argparse
+import os
+import tqdm
 
-# In[2]:
+parser = argparse.ArgumentParser()
+parser.add_argument("--name_data_file", type=str, help="A file containing unique RA and DEC of the objects ")
+parser.add_argument("--name_lc_file", type=str, help="A file containing the lightcurve of the objects ")
+parser.add_argument("--directory", type=str, default='.',help="Path to the directory containing the data and lightcurves")
+parser.add_argument("--save_to_path", type=str, default="periodograms",help="Path to the directory to store the periodogram.")
+
+parser.add_argument("--oversampling_factor", type=int, default=10, help="Oversampling factor ")
+parser.add_argument("--maximum_frequency", type=int, default=None, help="If None, then it is computed automatically")
+parser.add_argument("--ra_col_name", type=str, default="RA", help="Name of the RA column")
+parser.add_argument("--dec_col_name", type=str, default="DEC", help="Name of the DEC column")
+
+parser.add_argument("--idx_start", type=int, default=0, help="Row index in the data file to start computing the periodogram")
+parser.add_argument("--idx_end", type=int, default=-1, help="Row index in the data file to end the computation of the periodogram")
+
+parser.add_argument("--mjd_col", type=str, default="MJD-OBS", help="times column name")
+parser.add_argument("--mag_col", type=str, default="MAG_OPT", help="magnitude column name")
+parser.add_argument("--magerr_col", type=str, default="MAGERR_OPT", help="magnitude error column name")
+parser.add_argument("--filter_col", type=str, default="FILTER", help="Filter column name")
+opt = parser.parse_args()
+
+mjd_col=opt.mjd_col
+mag_col=opt.mag_col
+magerr_col=opt.magerr_col
+filter_col=opt.filter_col
+
+
+data_name=opt.name_data_file
+data_lc_name=opt.name_lc_file
+directory=opt.directory
+oversampling_fact=opt.oversampling_factor
+max_freq=opt.maximum_frequency
+ra_col=opt.ra_col_name
+dec_col=opt.dec_col_name
+save_to_path=opt.save_to_path
+start=opt.idx_start
+end=opt.idx_end
+
+if os.path.exists(save_to_path+'lsp')==False:
+    os.mkdir(save_to_path+'lsp')
+    os.mkdir(save_to_path+'theta')
 
 
 def theta_f(periods,mag,magerr,mjd):
@@ -32,95 +72,94 @@ def theta_f(periods,mag,magerr,mjd):
     return theta_array
 
 
-# In[28]:
-
-# Old freq_grid
-# def freq_grid(times,oversample_factor=10,f0=None,fn=None):
-
-#     df = 1.0 / (times.max() - times.min())
-#     if f0 is None:
-#         f0 = df
-#     if fn is None:
-#         fn = 0.5 / np.median(np.diff(times)) 
-#     return np.arange(f0, fn, df / oversample_factor)
-
-#New freq_grid
-def freq_grid(times,oversample_factor=10,f0=None,fn=None):
-    times=np.sort(times)
-    df = 1 / oversample_factor * (times.max() - times.min())
-    if f0 is None:
-        f0 = 4.0 / (times.max() - times.min())
-    if fn is None:
-        fn = 480
-    return np.arange(f0, fn, df)
-
-# In[4]:
-
-
 def compute_rms(x_mag):
     return np.sqrt(sum(x_mag**2)/x_mag.size)
 
 
-# In[5]:
-
 
 def scale_amplitude(x_mag,q_rms):
-    #scale any magnitudes to have the same amplitude as qmag
     x_rms=compute_rms(x_mag)
     x_scaled=x_mag*(q_rms/x_rms) 
     x_scaled= x_scaled - np.median(x_scaled)
     return x_scaled
 
-
+def freq_grid(times,oversampling_factor,f0=None,fn=None):
+    times=np.sort(times)
+    tbase=(times.max() - times.min())
+    df = 4.0 / tbase
+    if f0 is None:
+        f0 = df
+    if fn is None:
+        fn = 0.5 / np.median(np.diff(times)) 
+    return np.arange(f0, fn, 1/(tbase * oversampling_factor))
 # In[7]:
 
 
-data=pd.read_csv('sdb_filtered_starclass_dpts_ugrqi_v2.csv')
-filtered_data=pd.read_csv('sdb_filtered_starclass_dpts_ugrqi_unique_v2.csv')
+extension_data_lc=data_lc_name.split(sep='.')[-1]
 
+if extension_data_lc=='fits':
+    data=fits.open(directory+data_lc_name,memmap=True)
+    data = Table(data[1].data).to_pandas()
+    print("lightcurves contains %d elements"%(data.shape[0]))
+    
+elif extension_data_lc=="csv":
+    data=pd.read_csv(directory+data_lc_name)
+    print("lightcurves contains %d elements"%(data.shape[0]))
+elif extension_data_lc=='txt':
+    data=pd.read_table(directory+data_lc_name)
+    print("lightcurves contains %d elements"%(data.shape[0]))
+else: 
+    print("Data should be in fits or csv format only")
+    
+    
+extension_data=data_name.split(sep='.')[-1]
 
-# In[10]:
+if extension_data=='fits':
+    filtered_data=fits.open(directory+data_name,memmap=True)
+elif extension_data=="csv":
+    filtered_data=pd.read_csv(directory+data_name)
+    
+else: 
+    print("Data should be in fits or csv format only")
+        
+data[['RA','DEC']]=data[['RA','DEC']].round(5)
+filtered_data[[ra_col,dec_col]]=filtered_data[[ra_col,dec_col]].round(5)
 
+data=data[data['QC-FLAG']!='red']
+data=data[(data[mag_col]!=99.0)&(data[mag_col]>0.)]
 
-filtered_data.columns=['ID', 'RA_IN', 'DEC_IN']
+filtered_data=filtered_data[filtered_data['FLAGS']==0]
 
-
-# In[13]:
+print("file contains %d unique elements"%(filtered_data.shape[0]))
 
 passbands = ['q','u','i']
-# Define ML column's name
-mjd_col='MJD-OBS'
-mag_col='MAG_OPT'
-mag_err_col='MAGERR_OPT'
-filter_col='FILTER'
-# flag_col='flags' # if any
-
-idx=filtered_data.ID.values # idx from sdb selection (red flag, dp>40, class star>0.8)
 
 theta_jit = numba.jit(nopython=True)(theta_f)
-theta_compile=theta_jit(np.array([0.2,0.1]),data['MAG_OPT'].values,data['MAGERR_OPT'].values,
-data['MJD-OBS'].values) # Just to compile the code with few periods to save time for the next run
 
-for i,(ra, dec) in enumerate(filtered_data[['RA_IN','DEC_IN']].values):
-    print('processing: ',idx[i],' RA: ', ra,' DEC: ',dec)
-    df=data[(data['RA_IN']==ra)&(data['DEC_IN']==dec)]
-    # df = df[df[flag_col]!=2] # remove bad data
-    df=df[df[mag_col]>0] # some data might have negative mag (case of forced_photometry)
+if end==-1:
+    end=filtered_data.shape[0]
+
+for i in tqdm.tqdm(range(start,end)):
+    ra,dec=filtered_data[ra_col].values[i],filtered_data[dec_col].values[i]
+   
+    df=data[(data['RA']==ra)&(data['DEC']==dec)]
+    # print("lc size: %d"%(df.shape[0]))
+
     x, y, dyy = [], [], [] # correponds to mjd, mag, and mag_err
 
     qmag=df[mag_col].where(df[filter_col]=='q').dropna()
     qrms=compute_rms(qmag)
-    # print('n-obs in %s: '%('q'), qmag.size)
+
     for pband in passbands:
         x_ = df[mjd_col].where(df[filter_col]==pband).dropna()
         y_ = df[mag_col].where(df[filter_col]==pband).dropna()
-        yerr = df[mag_err_col].where(df[filter_col]==pband).dropna()
+        yerr = df[magerr_col].where(df[filter_col]==pband).dropna()
 
-        if pband !='q':
+        if (pband !='q') & (y_.size>0):
             y_ = scale_amplitude(y_,qrms)
-#             print('n-obs in %s: '%(pband), y_.size)
+
         else:
-            y_ = y_ - np.median(y_)
+            y_ = y_ - np.mean(y_)
 
         x.append(x_.tolist())
         y.append(y_.tolist())
@@ -130,35 +169,16 @@ for i,(ra, dec) in enumerate(filtered_data[['RA_IN','DEC_IN']].values):
     ymulti = np.hstack(y) 
     dymulti = np.hstack(dyy) 
     
-    frequencies=freq_grid(xmulti)
-    print('frequency trials: ',frequencies.size)
+    frequencies=freq_grid(times=xmulti,oversampling_factor=oversampling_fact,fn=max_freq)
+ 
     periods=1/frequencies
-    t_lsp0=time.time()
 
     lsp = LombScargle(t=xmulti, y=ymulti, dy=dymulti,nterms=1).power(frequency=frequencies, method="fastchi2", normalization="psd")
-
-    t_lsp1=time.time()
-  
-    t_theta0=time.time()
     
     theta=theta_f(periods,ymulti,dymulti,xmulti)
 
-    # lspw = LombScargle(t=xmulti, y=np.ones_like(ymulti), dy=None,nterms=1).power(frequency=frequencies, method="fast", normalization=None) 
-    # compute lspw if interested in the lsp of the window function
-    t_theta1=time.time()
-
-
-    print('Time processing for theta:', t_theta1 - t_theta0)
-    print('Time processing for lsp:', t_lsp1 - t_lsp0)
-
-#     psi=(2*lsp)/theta
-    # period_est=1/frequencies[np.argmax(psi)] # best period
-
-    np.save(save_to_path+'lsp/'+'%s_%s_%sv2.npy'%(str(ra),str(dec),str(idx[i])),np.vstack([frequencies,lsp]))
-    np.save(save_to_path+'theta/'+'%s_%s_%sv2.npy.npy'%(str(ra),str(dec),str(idx[i])),theta)
-    # np.save('periodogram_files/oversample_10/lspw_%s_1term.npy'%(elt),np.vstack([frequencies,lspw]))
-    # # np.save('periodogram_files/thetaw_%s.npy'%(elt))
-
+    np.save(save_to_path+'lsp/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),np.vstack([frequencies,lsp]))
+    np.save(save_to_path+'theta/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),theta)
 
 
 
