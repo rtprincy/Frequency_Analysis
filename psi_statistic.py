@@ -32,13 +32,17 @@ parser.add_argument("--mjd_col", type=str, default="MJD-OBS", help="times column
 parser.add_argument("--mag_col", type=str, default="MAG_OPT", help="magnitude column name")
 parser.add_argument("--magerr_col", type=str, default="MAGERR_OPT", help="magnitude error column name")
 parser.add_argument("--filter_col", type=str, default="FILTER", help="Filter column name")
+parser.add_argument("--ml_data", type=bool, default=True, help="True if the input files are from MeerLICHT data")
+parser.add_argument("--filters", type=str, default="qui", help="Filters to use, e.g., qui")
+
 opt = parser.parse_args()
 
 mjd_col=opt.mjd_col
 mag_col=opt.mag_col
 magerr_col=opt.magerr_col
 filter_col=opt.filter_col
-
+ml_data=opt.ml_data
+filters=opt.filters
 
 data_name=opt.name_data_file
 data_lc_name=opt.name_lc_file
@@ -78,6 +82,7 @@ def compute_rms(x_mag):
 
 
 def scale_amplitude(x_mag,q_rms):
+    #scale any magnitudes to have the same amplitude as qmag
     x_rms=compute_rms(x_mag)
     x_scaled=x_mag*(q_rms/x_rms) 
     x_scaled= x_scaled - np.median(x_scaled)
@@ -122,28 +127,34 @@ elif extension_data=="csv":
 else: 
     print("Data should be in fits or csv format only")
         
+
 data[['RA','DEC']]=data[['RA','DEC']].round(5)
 filtered_data[[ra_col,dec_col]]=filtered_data[[ra_col,dec_col]].round(5)
 
-data=data[data['QC-FLAG']!='red']
-data=data[(data[mag_col]!=99.0)&(data[mag_col]>0.)]
+if ml_data==True:
+    
+    data=data[data['QC-FLAG']!='red']
+    data=data[(data[mag_col]!=99.0)&(data[mag_col]>0.)]
 
-filtered_data=filtered_data[filtered_data['FLAGS']==0]
-
+    filtered_data=filtered_data[filtered_data['FLAGS']==0]
+    
+passbands=list(filters)
+   
 print("file contains %d unique elements"%(filtered_data.shape[0]))
 
-passbands = ['q','u','i']
-
 theta_jit = numba.jit(nopython=True)(theta_f)
+theta_compile=theta_jit(np.array([0.2,0.1]),data[mag_col].values,data[magerr_col].values,
+data[mjd_col].values) # Just to compile the code with few periods to save time for the next run
 
 if end==-1:
     end=filtered_data.shape[0]
-
+lsp=np.zeros(1)
+theta=np.ones(1)
+frequencies=np.zeros(1)
 for i in tqdm.tqdm(range(start,end)):
     ra,dec=filtered_data[ra_col].values[i],filtered_data[dec_col].values[i]
    
     df=data[(data['RA']==ra)&(data['DEC']==dec)]
-    # print("lc size: %d"%(df.shape[0]))
 
     x, y, dyy = [], [], [] # correponds to mjd, mag, and mag_err
 
@@ -169,16 +180,12 @@ for i in tqdm.tqdm(range(start,end)):
     ymulti = np.hstack(y) 
     dymulti = np.hstack(dyy) 
     
-    frequencies=freq_grid(times=xmulti,oversampling_factor=oversampling_fact,fn=max_freq)
- 
-    periods=1/frequencies
+    if  xmulti.size > 39:
+        frequencies=freq_grid(times=xmulti,oversampling_factor=oversampling_fact,fn=max_freq)
+        periods=1/frequencies
+        lsp = LombScargle(t=xmulti, y=ymulti, dy=dymulti,nterms=1).power(frequency=frequencies, method="fastchi2", normalization="psd")
+        theta=theta_jit(periods,ymulti,dymulti,xmulti)
 
-    lsp = LombScargle(t=xmulti, y=ymulti, dy=dymulti,nterms=1).power(frequency=frequencies, method="fastchi2", normalization="psd")
-    
-    theta=theta_f(periods,ymulti,dymulti,xmulti)
 
     np.save(save_to_path+'lsp/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),np.vstack([frequencies,lsp]))
     np.save(save_to_path+'theta/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),theta)
-
-
-
