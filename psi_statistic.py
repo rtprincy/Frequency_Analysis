@@ -13,6 +13,8 @@ from astropy.table import Table, vstack
 import argparse
 import os
 import tqdm
+from astropy import time, coordinates as coord, units as u
+pd.options.mode.chained_assignment = None
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--name_data_file", type=str, help="A file containing unique RA and DEC of the objects ")
@@ -22,8 +24,14 @@ parser.add_argument("--save_to_path", type=str, default="periodograms",help="Pat
 
 parser.add_argument("--oversampling_factor", type=int, default=10, help="Oversampling factor ")
 parser.add_argument("--maximum_frequency", type=int, default=None, help="If None, then it is computed automatically")
-parser.add_argument("--ra_col_name", type=str, default="RA", help="Name of the RA column")
-parser.add_argument("--dec_col_name", type=str, default="DEC", help="Name of the DEC column")
+
+parser.add_argument("--ra_col_name1", type=str, default="RA", help="Name of the RA column for the unique objects data")
+
+parser.add_argument("--dec_col_name1", type=str, default="DEC", help="Name of the DEC column for the unique objects data")
+
+parser.add_argument("--ra_col_name2", type=str, default="RA", help="Name of the RA column for the lightcurve data")
+
+parser.add_argument("--dec_col_name2", type=str, default="DEC", help="Name of the DEC column for the lightcurve data")
 
 parser.add_argument("--idx_start", type=int, default=0, help="Row index in the data file to start computing the periodogram")
 parser.add_argument("--idx_end", type=int, default=-1, help="Row index in the data file to end the computation of the periodogram")
@@ -34,6 +42,8 @@ parser.add_argument("--magerr_col", type=str, default="MAGERR_OPT", help="magnit
 parser.add_argument("--filter_col", type=str, default="FILTER", help="Filter column name")
 parser.add_argument("--ml_data", type=bool, default=True, help="True if the input files are from MeerLICHT data")
 parser.add_argument("--filters", type=str, default="qui", help="Filters to use, e.g., qui")
+parser.add_argument("--flag_col", type=str, default="QC-FLAG", help="Name of the flag column for MeerLICHT data. Rows with flag='red' will be removed in the lightcurve data.")
+parser.add_argument("--remove_outliers", type=bool, default=False, help="If true, outliers in the lightcurve will be removed")
 
 opt = parser.parse_args()
 
@@ -41,19 +51,27 @@ mjd_col=opt.mjd_col
 mag_col=opt.mag_col
 magerr_col=opt.magerr_col
 filter_col=opt.filter_col
+flag_col=opt.flag_col
 ml_data=opt.ml_data
 filters=opt.filters
 
+remove_outliers=opt.remove_outliers
 data_name=opt.name_data_file
 data_lc_name=opt.name_lc_file
 directory=opt.directory
 oversampling_fact=opt.oversampling_factor
 max_freq=opt.maximum_frequency
-ra_col=opt.ra_col_name
-dec_col=opt.dec_col_name
+ra_col1=opt.ra_col_name1
+dec_col1=opt.dec_col_name1
+
+ra_col2=opt.ra_col_name2
+dec_col2=opt.dec_col_name2
+
 save_to_path=opt.save_to_path
 start=opt.idx_start
 end=opt.idx_end
+
+cols=[ra_col2,dec_col2,mjd_col,mag_col,magerr_col,filter_col,flag_col]
 
 if os.path.exists(save_to_path+'lsp')==False:
     os.mkdir(save_to_path+'lsp')
@@ -80,7 +98,6 @@ def compute_rms(x_mag):
     return np.sqrt(sum(x_mag**2)/x_mag.size)
 
 
-
 def scale_amplitude(x_mag,q_rms):
     #scale any magnitudes to have the same amplitude as qmag
     x_rms=compute_rms(x_mag)
@@ -97,8 +114,31 @@ def freq_grid(times,oversampling_factor,f0=None,fn=None):
     if fn is None:
         fn = 0.5 / np.median(np.diff(times)) 
     return np.arange(f0, fn, 1/(tbase * oversampling_factor))
-# In[7]:
 
+def remove_outliers(df,filters,mag_col,filter_col):
+    dframe=pd.DataFrame()
+    for Filter in filters:
+        q3, q1 = np.percentile(df[mag_col][df[filter_col]==Filter], [75 ,25])
+        iqr=q3-q1
+        h=q3+iqr*1.5
+        l=q1-iqr*1.5
+        mag=df[mag_col][df[filter_col]==Filter]
+        mag=mag[(mag<=h)&(mag>=l)]
+        df_=df[(df[filter_col]==Filter)&(df[mag_col]<=h)&(df[mag_col]>=l)]
+        dframe=pd.concat([dframe,df_])
+    return dframe,iqr
+
+def correct_time(df,mjd_col,ra_col,dec_col):
+    ip_peg = coord.SkyCoord(df[ra_col].values,df[dec_col].values,
+                            unit=(u.deg, u.deg), frame='icrs')
+    saao = coord.EarthLocation.of_site('SAAO')
+    times = time.Time(list(df[mjd_col]), format='mjd',
+                      scale='utc', location=saao) 
+    ltt_bary = times.light_travel_time(ip_peg,'barycentric')  
+    time_barycentre = times.tdb + ltt_bary
+    df['bct']=time_barycentre.value
+    
+    return df
 
 extension_data_lc=data_lc_name.split(sep='.')[-1]
 
@@ -120,51 +160,62 @@ else:
 extension_data=data_name.split(sep='.')[-1]
 
 if extension_data=='fits':
-    filtered_data=fits.open(directory+data_name,memmap=True)
+    data_unique=fits.open(directory+data_name,memmap=True)
 elif extension_data=="csv":
-    filtered_data=pd.read_csv(directory+data_name)
+    data_unique=pd.read_csv(directory+data_name)
     
 else: 
     print("Data should be in fits or csv format only")
-        
 
-data[['RA','DEC']]=data[['RA','DEC']].round(5)
-filtered_data[[ra_col,dec_col]]=filtered_data[[ra_col,dec_col]].round(5)
+    
+data=data[cols]
+data[[ra_col2,dec_col2]]=data[[ra_col2,dec_col2]].round(5)
+data_unique[[ra_col1,dec_col1]]=data_unique[[ra_col1,dec_col1]].round(5)
+
 
 if ml_data==True:
     
-    data=data[data['QC-FLAG']!='red']
+    data=data[data[flag_col]!='red']
     data=data[(data[mag_col]!=99.0)&(data[mag_col]>0.)]
-
-    filtered_data=filtered_data[filtered_data['FLAGS']==0]
+    data_unique=data_unique[data_unique['FLAGS']==0]
+  
     
 passbands=list(filters)
-   
-print("file contains %d unique elements"%(filtered_data.shape[0]))
+    
+    
+print("file contains %d unique elements"%(data_unique.shape[0]))
+
 
 theta_jit = numba.jit(nopython=True)(theta_f)
-theta_compile=theta_jit(np.array([0.2,0.1]),data[mag_col].values,data[magerr_col].values,
-data[mjd_col].values) # Just to compile the code with few periods to save time for the next run
 
 if end==-1:
-    end=filtered_data.shape[0]
+    end=data_unique.shape[0]
+    
 lsp=np.zeros(1)
 theta=np.ones(1)
 frequencies=np.zeros(1)
+
 for i in tqdm.tqdm(range(start,end)):
-    ra,dec=filtered_data[ra_col].values[i],filtered_data[dec_col].values[i]
+    ra,dec=data_unique[ra_col1].values[i],data_unique[dec_col1].values[i]
    
-    df=data[(data['RA']==ra)&(data['DEC']==dec)]
+    df=data[(data[ra_col2]==ra)&(data[dec_col2]==dec)]
+    df.dropna(inplace=True)
 
-    x, y, dyy = [], [], [] # correponds to mjd, mag, and mag_err
+    df=correct_time(df,mjd_col,ra_col2,dec_col2)
 
-    qmag=df[mag_col].where(df[filter_col]=='q').dropna()
+    if remove_outliers==True:
+        df=remove_outliers(df,passbands,mag_col,filter_col)
+
+    qmag=df[mag_col].where(df[filter_col]=='q')
     qrms=compute_rms(qmag)
-
+        
+    x, y, dyy = [], [], [] # correponds to mjd, mag, and mag_err
+    
     for pband in passbands:
-        x_ = df[mjd_col].where(df[filter_col]==pband).dropna()
-        y_ = df[mag_col].where(df[filter_col]==pband).dropna()
-        yerr = df[magerr_col].where(df[filter_col]==pband).dropna()
+
+        x_ = df['bct'][df[filter_col]==pband]
+        y_ = df[mag_col][df[filter_col]==pband]
+        yerr = df[magerr_col][df[filter_col]==pband]
 
         if (pband !='q') & (y_.size>0):
             y_ = scale_amplitude(y_,qrms)
@@ -182,8 +233,11 @@ for i in tqdm.tqdm(range(start,end)):
     
     if  xmulti.size > 39:
         frequencies=freq_grid(times=xmulti,oversampling_factor=oversampling_fact,fn=max_freq)
+
         periods=1/frequencies
+
         lsp = LombScargle(t=xmulti, y=ymulti, dy=dymulti,nterms=1).power(frequency=frequencies, method="fastchi2", normalization="psd")
+    
         theta=theta_jit(periods,ymulti,dymulti,xmulti)
 
 
