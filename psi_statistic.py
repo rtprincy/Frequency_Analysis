@@ -136,7 +136,7 @@ def correct_time(df,mjd_col,ra_col,dec_col):
                       scale='utc', location=saao) 
     ltt_bary = times.light_travel_time(ip_peg,'barycentric')  
     time_barycentre = times.tdb + ltt_bary
-    df['bct']=time_barycentre.value
+    df.loc[:,'bct']=time_barycentre.value
     
     return df
 
@@ -206,7 +206,7 @@ for i in tqdm.tqdm(range(start,end)):
     if remove_outliers==True:
         df=remove_outliers(df,passbands,mag_col,filter_col)
 
-    qmag=df[mag_col].where(df[filter_col]=='q')
+    qmag=df[mag_col][df[filter_col]=='q']
     qrms=compute_rms(qmag)
         
     x, y, dyy = [], [], [] # correponds to mjd, mag, and mag_err
