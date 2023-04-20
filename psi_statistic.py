@@ -15,6 +15,9 @@ import os
 import tqdm
 from astropy import time, coordinates as coord, units as u
 pd.options.mode.chained_assignment = None
+from distutils.util import strtobool
+
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--name_data_file", type=str, help="A file containing unique RA and DEC of the objects ")
@@ -24,6 +27,8 @@ parser.add_argument("--save_to_path", type=str, default="periodograms",help="Pat
 
 parser.add_argument("--oversampling_factor", type=int, default=10, help="Oversampling factor ")
 parser.add_argument("--maximum_frequency", type=int, default=None, help="If None, then it is computed automatically")
+
+parser.add_argument("--minimum_frequency", type=float, default=0.05, help="Initial frequency to start the frequency search. This is done automatically for MeerLICHT data")
 
 parser.add_argument("--ra_col_name1", type=str, default="RA", help="Name of the RA column for the unique objects data")
 
@@ -40,13 +45,25 @@ parser.add_argument("--mjd_col", type=str, default="MJD-OBS", help="times column
 parser.add_argument("--mag_col", type=str, default="MAG_OPT", help="magnitude column name")
 parser.add_argument("--magerr_col", type=str, default="MAGERR_OPT", help="magnitude error column name")
 parser.add_argument("--filter_col", type=str, default="FILTER", help="Filter column name")
-parser.add_argument("--ml_data", type=bool, default=True, help="True if the input files are from MeerLICHT data")
+
 parser.add_argument("--filters", type=str, default="qui", help="Filters to use, e.g., qui")
+
+parser.add_argument("--scaling_filters", type=str, default="q", help="The filter used to  scale the magnitude values in other filters. The default is q for MeerLICHT.")
+
 parser.add_argument("--flag_col", type=str, default="QC-FLAG", help="Name of the flag column for MeerLICHT data. Rows with flag='red' will be removed in the lightcurve data.")
-parser.add_argument("--remove_outliers", type=bool, default=False, help="If true, outliers in the lightcurve will be removed")
+
+parser.add_argument("--object_col_id",type=str,default='asas_sn_id',help="Column name that contains IDs to cross-match the objects with their lightcurves")
+
+parser.add_argument("--ml_data", type=lambda x: bool(strtobool(x)), default=True, help="True if the input files are from MeerLICHT data")
+
+parser.add_argument("--window_function", type=lambda x: bool(strtobool(x)), default=False, help="Indicate whether to compute the spectral window")
+
+
+parser.add_argument('--remove_outliers',type=lambda x: bool(strtobool(x)),
+                   default=False, help="If true, outliers in the lightcurve will be removed")
+
 
 opt = parser.parse_args()
-
 mjd_col=opt.mjd_col
 mag_col=opt.mag_col
 magerr_col=opt.magerr_col
@@ -54,7 +71,11 @@ filter_col=opt.filter_col
 flag_col=opt.flag_col
 ml_data=opt.ml_data
 filters=opt.filters
+filter_scale=opt.scaling_filters
+col_id=opt.object_col_id
+window_function=opt.window_function
 
+min_freq=opt.minimum_frequency
 remove_outliers=opt.remove_outliers
 data_name=opt.name_data_file
 data_lc_name=opt.name_lc_file
@@ -168,16 +189,17 @@ else:
     print("Data should be in fits or csv format only")
 
     
-data=data[cols]
-data[[ra_col2,dec_col2]]=data[[ra_col2,dec_col2]].round(5)
-data_unique[[ra_col1,dec_col1]]=data_unique[[ra_col1,dec_col1]].round(5)
 
 
 if ml_data==True:
-    
+    data=data[cols]
+    data[[ra_col2,dec_col2]]=data[[ra_col2,dec_col2]].round(5)
+    data_unique[[ra_col1,dec_col1]]=data_unique[[ra_col1,dec_col1]].round(5)
+
     data=data[data[flag_col]!='red']
     data=data[(data[mag_col]!=99.0)&(data[mag_col]>0.)]
     data_unique=data_unique[data_unique['FLAGS']==0]
+    
   
     
 passbands=list(filters)
@@ -187,6 +209,8 @@ print("file contains %d unique elements"%(data_unique.shape[0]))
 
 
 theta_jit = numba.jit(nopython=True)(theta_f)
+theta_compile=theta_jit(np.array([0.2,0.1]),data[mag_col].values,data[magerr_col].values,
+data[mjd_col].values) # Just to compile the code with few periods to save time for the next run
 
 if end==-1:
     end=data_unique.shape[0]
@@ -195,51 +219,153 @@ lsp=np.zeros(1)
 theta=np.ones(1)
 frequencies=np.zeros(1)
 
-for i in tqdm.tqdm(range(start,end)):
-    ra,dec=data_unique[ra_col1].values[i],data_unique[dec_col1].values[i]
-   
-    df=data[(data[ra_col2]==ra)&(data[dec_col2]==dec)]
-    df.dropna(inplace=True)
+if ml_data:
+    for i in tqdm.tqdm(range(start,end)):
+        ra,dec=data_unique[ra_col1].values[i],data_unique[dec_col1].values[i]
 
-    df=correct_time(df,mjd_col,ra_col2,dec_col2)
+        df=data[(data[ra_col2]==ra)&(data[dec_col2]==dec)]
+        # print("lc size: %d"%(df.shape[0]))
+        df.dropna(inplace=True)
 
-    if remove_outliers==True:
-        df=remove_outliers(df,passbands,mag_col,filter_col)
+        df=correct_time(df,mjd_col,ra_col2,dec_col2)
 
-    qmag=df[mag_col][df[filter_col]=='q']
-    qrms=compute_rms(qmag)
+        if remove_outliers==True:
+            df=remove_outliers(df,passbands,mag_col,filter_col)
+
+        qmag=df[mag_col][df[filter_col]==filter_scale]
+        qrms=compute_rms(qmag)
+
+        x, y, dyy = [], [], [] # correponds to mjd, mag, and mag_err
+
+        for pband in passbands:
+
+            x_ = df['bct'][df[filter_col]==pband]
+            y_ = df[mag_col][df[filter_col]==pband]
+            yerr = df[magerr_col][df[filter_col]==pband]
+
+            if (pband !=filter_scale) & (y_.size>0):
+                y_ = scale_amplitude(y_,qrms)
+
+            else:
+                y_ = y_ - np.mean(y_)
+
+            x.append(x_.tolist())
+            y.append(y_.tolist())
+            dyy.append(yerr.tolist())
+
+        xmulti = np.hstack(x) 
+        ymulti = np.hstack(y) 
+        dymulti = np.hstack(dyy) 
+
+        if  xmulti.size > 39:
+            frequencies=freq_grid(times=xmulti,oversampling_factor=oversampling_fact,fn=max_freq)
+
+            periods=1/frequencies
+
+            
+            lsp = LombScargle(t=xmulti, y=ymulti, dy=dymulti,nterms=1).power(frequency=frequencies, method="fastchi2", normalization="psd")
+
+            theta=theta_jit(periods,ymulti,dymulti,xmulti)
+
+
+        np.save(save_to_path+'lsp/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),np.vstack([frequencies,lsp]))
+        np.save(save_to_path+'theta/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),theta)
         
-    x, y, dyy = [], [], [] # correponds to mjd, mag, and mag_err
+
+else:
     
-    for pband in passbands:
-
-        x_ = df['bct'][df[filter_col]==pband]
-        y_ = df[mag_col][df[filter_col]==pband]
-        yerr = df[magerr_col][df[filter_col]==pband]
-
-        if (pband !='q') & (y_.size>0):
-            y_ = scale_amplitude(y_,qrms)
-
-        else:
-            y_ = y_ - np.mean(y_)
-
-        x.append(x_.tolist())
-        y.append(y_.tolist())
-        dyy.append(yerr.tolist())
-
-    xmulti = np.hstack(x) 
-    ymulti = np.hstack(y) 
-    dymulti = np.hstack(dyy) 
+    obj_id=data_unique[col_id].values
+    data[mjd_col]=data[mjd_col] - 2450000 # For ASAS-SN data
     
-    if  xmulti.size > 39:
-        frequencies=freq_grid(times=xmulti,oversampling_factor=oversampling_fact,fn=max_freq)
+    for i in tqdm.tqdm(range(start,end)):
+        
 
-        periods=1/frequencies
+        df=data[data[col_id]==obj_id[i]]
+        # print("lc size: %d"%(df.shape[0]))
+        df.dropna(inplace=True)
 
-        lsp = LombScargle(t=xmulti, y=ymulti, dy=dymulti,nterms=1).power(frequency=frequencies, method="fastchi2", normalization="psd")
+        if remove_outliers==True:
+            df=remove_outliers(df,passbands,mag_col,filter_col)
+        
+        passbands=np.unique(list(df[filter_col]))
+        
+        mag=df[mag_col][df[filter_col]==filter_scale]
+        rms=compute_rms(mag)
+
+        x, y, dyy = [], [], [] # correponds to mjd, mag, and mag_err
+
+        for pband in passbands:
+
+            x_ = df[mjd_col][df[filter_col]==pband]
+            y_ = df[mag_col][df[filter_col]==pband]
+            yerr = df[magerr_col][df[filter_col]==pband]
+
+            if (pband !=filter_scale) & (y_.size>0):
+                y_ = scale_amplitude(y_,rms)
+
+            else:
+                y_ = y_ - np.mean(y_)
+
+            x.append(x_.tolist())
+            y.append(y_.tolist())
+            dyy.append(yerr.tolist())
+
+        xmulti = np.hstack(x) 
+        ymulti = np.hstack(y) 
+        dymulti = np.hstack(dyy) 
+
+        if  xmulti.size > 39:
+            frequencies=freq_grid(times=xmulti,oversampling_factor=oversampling_fact,
+                                  f0=min_freq,fn=max_freq)
+            periods=1/frequencies
+
+
+            lsp = LombScargle(t=xmulti, y=ymulti, dy=dymulti,nterms=1).power(frequency=frequencies, method="fastchi2", normalization="psd")
+
+            theta=theta_jit(periods,ymulti,dymulti,xmulti)
+
+
+        np.save(save_to_path+'lsp/'+'%s.npy'%(str(obj_id[i])),np.vstack([frequencies,lsp]))
+        np.save(save_to_path+'theta/'+'%s.npy'%(str(obj_id[i])),theta)
+
+        
+if window_function:
+    for i in tqdm.tqdm(range(start,end)):
+        ra,dec=data_unique[ra_col1].values[i],data_unique[dec_col1].values[i]
+
+        df=data[(data[ra_col2]==ra)&(data[dec_col2]==dec)]
+        # print("lc size: %d"%(df.shape[0]))
+        df.dropna(inplace=True)
+
+        df=correct_time(df,mjd_col,ra_col2,dec_col2)
+
+        if remove_outliers==True:
+            df=remove_outliers(df,passbands,mag_col,filter_col)
+
+        x, y, dyy = [], [], [] # correponds to mjd, mag, and mag_err
+
+        for pband in passbands:
+
+            x_ = df['bct'][df[filter_col]==pband]
+            yerr = df[magerr_col][df[filter_col]==pband]
+
+            x.append(x_.tolist())
+            dyy.append(yerr.tolist())
+
+        xmulti = np.hstack(x) 
+        ymulti = np.ones(xmulti.size) 
+        dymulti = np.hstack(dyy) 
+
+        if  xmulti.size > 39:
+            frequencies=freq_grid(times=xmulti,oversampling_factor=oversampling_fact,fn=max_freq)
+
+            periods=1/frequencies
+
+            lsp = LombScargle(t=xmulti, y=np.ones_like(ymulti), dy=None, nterms=1).power(frequency=frequencies, method="fast")
+
+        if os.path.exists(save_to_path+'window_function/lsp')==False:
+            os.mkdir(save_to_path+'window_function/lsp')
+
+        np.save(save_to_path+'window_function/lsp/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),np.vstack([frequencies,lsp]))
+
     
-        theta=theta_jit(periods,ymulti,dymulti,xmulti)
-
-
-    np.save(save_to_path+'lsp/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),np.vstack([frequencies,lsp]))
-    np.save(save_to_path+'theta/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),theta)
