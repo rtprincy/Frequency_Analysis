@@ -347,9 +347,9 @@ if window_function:
 
             lsp = LombScargle(t=xmulti, y=np.ones_like(ymulti), dy=None, nterms=1).power(frequency=frequencies, method="fast")
 
-        if os.path.exists(save_to_path+'window_function/lsp')==False:
-            os.makedirs(save_to_path+'window_function/lsp')
+        if os.path.exists(save_to_path+'window_function')==False:
+            os.makedirs(save_to_path+'window_function')
 
-        np.save(save_to_path+'window_function/lsp/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),np.vstack([frequencies,lsp]))
+        np.save(save_to_path+'window_function/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),np.vstack([frequencies,lsp]))
 
     
