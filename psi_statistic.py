@@ -24,41 +24,25 @@ parser.add_argument("--name_data_file", type=str, help="A file containing unique
 parser.add_argument("--name_lc_file", type=str, help="A file containing the lightcurve of the objects ")
 parser.add_argument("--directory", type=str, default='.',help="Path to the directory containing the data and lightcurves")
 parser.add_argument("--save_to_path", type=str, default="periodograms",help="Path to the directory to store the periodogram.")
-
 parser.add_argument("--oversampling_factor", type=int, default=10, help="Oversampling factor ")
 parser.add_argument("--maximum_frequency", type=int, default=None, help="If None, then it is computed automatically")
-
 parser.add_argument("--minimum_frequency", type=float, default=0.05, help="Initial frequency to start the frequency search. This is done automatically for MeerLICHT data")
-
 parser.add_argument("--ra_col_name1", type=str, default="RA", help="Name of the RA column for the unique objects data")
-
 parser.add_argument("--dec_col_name1", type=str, default="DEC", help="Name of the DEC column for the unique objects data")
-
 parser.add_argument("--ra_col_name2", type=str, default="RA", help="Name of the RA column for the lightcurve data")
-
 parser.add_argument("--dec_col_name2", type=str, default="DEC", help="Name of the DEC column for the lightcurve data")
-
 parser.add_argument("--idx_start", type=int, default=0, help="Row index in the data file to start computing the periodogram")
 parser.add_argument("--idx_end", type=int, default=-1, help="Row index in the data file to end the computation of the periodogram")
-
 parser.add_argument("--mjd_col", type=str, default="MJD-OBS", help="times column name")
 parser.add_argument("--mag_col", type=str, default="MAG_OPT", help="magnitude column name")
 parser.add_argument("--magerr_col", type=str, default="MAGERR_OPT", help="magnitude error column name")
 parser.add_argument("--filter_col", type=str, default="FILTER", help="Filter column name")
-
 parser.add_argument("--filters", type=str, default="qui", help="Filters to use, e.g., qui")
-
 parser.add_argument("--scaling_filters", type=str, default="q", help="The filter used to  scale the magnitude values in other filters. The default is q for MeerLICHT.")
-
 parser.add_argument("--flag_col", type=str, default="QC-FLAG", help="Name of the flag column for MeerLICHT data. Rows with flag='red' will be removed in the lightcurve data.")
-
 parser.add_argument("--object_col_id",type=str,default='asas_sn_id',help="Column name that contains IDs to cross-match the objects with their lightcurves")
-
 parser.add_argument("--ml_data", type=lambda x: bool(strtobool(x)), default=True, help="True if the input files are from MeerLICHT data")
-
 parser.add_argument("--window_function", type=lambda x: bool(strtobool(x)), default=False, help="Indicate whether to compute the spectral window")
-
-
 parser.add_argument('--remove_outliers',type=lambda x: bool(strtobool(x)),
                    default=False, help="If true, outliers in the lightcurve will be removed")
 
@@ -364,7 +348,7 @@ if window_function:
             lsp = LombScargle(t=xmulti, y=np.ones_like(ymulti), dy=None, nterms=1).power(frequency=frequencies, method="fast")
 
         if os.path.exists(save_to_path+'window_function/lsp')==False:
-            os.mkdir(save_to_path+'window_function/lsp')
+            os.makedirs(save_to_path+'window_function/lsp')
 
         np.save(save_to_path+'window_function/lsp/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),np.vstack([frequencies,lsp]))
 
