@@ -43,7 +43,7 @@ parser.add_argument("--flag_col", type=str, default="QC-FLAG", help="Name of the
 parser.add_argument("--object_col_id",type=str,default='asas_sn_id',help="Column name that contains IDs to cross-match the objects with their lightcurves")
 parser.add_argument("--ml_data", type=lambda x: bool(strtobool(x)), default=True, help="True if the input files are from MeerLICHT data")
 parser.add_argument("--window_function", type=lambda x: bool(strtobool(x)), default=False, help="Indicate whether to compute the spectral window")
-parser.add_argument('--remove_outliers',type=lambda x: bool(strtobool(x)),
+parser.add_argument('--rm_outliers',type=lambda x: bool(strtobool(x)),
                    default=False, help="If true, outliers in the lightcurve will be removed")
 
 
@@ -60,7 +60,7 @@ col_id=opt.object_col_id
 window_function=opt.window_function
 
 min_freq=opt.minimum_frequency
-remove_outliers=opt.remove_outliers
+rm_outliers=opt.rm_outliers
 data_name=opt.name_data_file
 data_lc_name=opt.name_lc_file
 directory=opt.directory
@@ -210,7 +210,7 @@ if ml_data:
 
         df=correct_time(df,mjd_col,ra_col2,dec_col2)
 
-        if remove_outliers==True:
+        if rm_outliers==True:
             df=remove_outliers(df,passbands,mag_col,filter_col)
 
         qmag=df[mag_col][df[filter_col]==filter_scale]
