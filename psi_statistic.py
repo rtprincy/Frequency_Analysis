@@ -249,9 +249,9 @@ if ml_data:
             theta=theta_jit(periods,ymulti,dymulti,xmulti)
             
         else:
-             lsp=-np.zeros(1)
-             theta=-np.ones(1)
-             frequencies=-np.ones(1)
+            lsp=-np.zeros(1)
+            theta=-np.ones(1)
+            frequencies=-np.ones(1)
 
         np.save(save_to_path+'lsp/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),np.vstack([frequencies,lsp]))
         np.save(save_to_path+'theta/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),theta)
@@ -352,9 +352,9 @@ if window_function:
 
             lsp = LombScargle(t=xmulti, y=np.ones_like(ymulti), dy=None, nterms=1).power(frequency=frequencies, method="fast")
         else:
-             lsp=-np.zeros(1)
-             theta=-np.ones(1)
-             frequencies=-np.ones(1)
+            lsp=-np.zeros(1)
+            theta=-np.ones(1)
+            frequencies=-np.ones(1)
 
         if os.path.exists(save_to_path+'window_function')==False:
             os.makedirs(save_to_path+'window_function')
