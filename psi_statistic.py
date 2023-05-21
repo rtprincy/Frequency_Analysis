@@ -198,10 +198,7 @@ data[mjd_col].values) # Just to compile the code with few periods to save time f
 
 if end==-1:
     end=data_unique.shape[0]
-    
-lsp=np.zeros(1)
-theta=np.ones(1)
-frequencies=np.zeros(1)
+   
 
 if ml_data:
     for i in tqdm.tqdm(range(start,end)):
@@ -250,7 +247,11 @@ if ml_data:
             lsp = LombScargle(t=xmulti, y=ymulti, dy=dymulti,nterms=1).power(frequency=frequencies, method="fastchi2", normalization="psd")
 
             theta=theta_jit(periods,ymulti,dymulti,xmulti)
-
+            
+        else:
+             lsp=-np.zeros(1)
+             theta=-np.ones(1)
+             frequencies=-np.ones(1)
 
         np.save(save_to_path+'lsp/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),np.vstack([frequencies,lsp]))
         np.save(save_to_path+'theta/'+'%s_%s_%s.npy'%(str(ra),str(dec),str(i)),theta)
@@ -307,6 +308,10 @@ else:
             lsp = LombScargle(t=xmulti, y=ymulti, dy=dymulti,nterms=1).power(frequency=frequencies, method="fastchi2", normalization="psd")
 
             theta=theta_jit(periods,ymulti,dymulti,xmulti)
+        else:
+            lsp=-np.zeros(1)
+            theta=-np.ones(1)
+            frequencies=-np.ones(1)
 
 
         np.save(save_to_path+'lsp/'+'%s.npy'%(str(obj_id[i])),np.vstack([frequencies,lsp]))
@@ -346,6 +351,10 @@ if window_function:
             periods=1/frequencies
 
             lsp = LombScargle(t=xmulti, y=np.ones_like(ymulti), dy=None, nterms=1).power(frequency=frequencies, method="fast")
+        else:
+             lsp=-np.zeros(1)
+             theta=-np.ones(1)
+             frequencies=-np.ones(1)
 
         if os.path.exists(save_to_path+'window_function')==False:
             os.makedirs(save_to_path+'window_function')
