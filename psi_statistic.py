@@ -164,14 +164,18 @@ frequencies=np.array([-1])
 if end==-1:
     end=len(source_ids)
 
-skip_header=1
-source_ids=np.array(source_ids[skip_header:],dtype=int)
+if len(source_ids)>1:  
+    skip_header=1
+    source_ids=np.array(source_ids[skip_header:],dtype=int)
+else:
+    source_ids=np.array(source_ids,dtype=int)
 
 if catalog=='ml_data':
     for source_id in tqdm.tqdm(source_ids):
 
             df=data[data[source_id_col]==source_id]
             df.dropna(inplace=True)
+          
             if df[df[filter_col]==filter_scale].shape[0] >= 40:
                 
                 lc_passbands=set(np.unique(df[filter_col].values))
