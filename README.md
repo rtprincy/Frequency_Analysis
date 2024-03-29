@@ -13,4 +13,4 @@ The method used in this code is described by [Ranaivomanana et al., 2023](https:
 For a single Gaia id, replace "gaia_id" with its actual value:
 
 
-python psi_stat_bgdata.py --source_id gaia_id --name_lc_file "bg_lightcurves.csv" --directory "/users/princy/" --save_to_path "/users/princy/periodogram/" --minimum_frequency=0.05 --maximum_frequency=50 --passbands='q' 
+python psi_stat_bgdata.py --source_id gaia_id --name_lc_file "bg_lightcurves.csv" --directory "/users/princy/" --save_to_path "/users/princy/periodogram/" --minimum_frequency=0.05 --maximum_frequency=50 --passbands='q,u,i' 
