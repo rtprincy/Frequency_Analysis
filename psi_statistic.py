@@ -119,8 +119,8 @@ optimise_frequency=opt.optimise_frequency
 
 
 if os.path.exists(save_to_path+'lsp')==False:
-    os.mkdir(save_to_path+'lsp')
-    os.mkdir(save_to_path+'theta')
+    os.makedirs(save_to_path+'lsp')
+    os.makedirs(save_to_path+'theta')
 
 
 extension_data_lc=data_lc_name.split(sep='.')[-1]
