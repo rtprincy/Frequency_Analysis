@@ -59,7 +59,7 @@ parser.add_argument("--flag_col", type=str, default="QC_FLAG", help="Name of the
 
 parser.add_argument("--object_col_id",type=str,default='asas_sn_id',help="Column name that contains IDs to cross-match the objects with their lightcurves")
 
-parser.add_argument("--catalog", type=str, default='ml_data', help="True if the input files are from MeerLICHT data")
+parser.add_argument("--catalog", type=str, default='bg_data', help="True if the input files are from MeerLICHT data")
 
 parser.add_argument("--window_function", type=lambda x: bool(strtobool(x)), default=False, help="Indicate whether to compute the spectral window")
 
@@ -170,8 +170,8 @@ if len(source_ids)>1:
 else:
     source_ids=np.array(source_ids,dtype=int)
 
-if catalog=='ml_data':
-    for source_id in tqdm.tqdm(source_ids):
+if catalog=='bg_data':
+    for source_id in tqdm.tqdm(source_ids[start:end]):
 
             df=data[data[source_id_col]==source_id]
             df.dropna(inplace=True)
