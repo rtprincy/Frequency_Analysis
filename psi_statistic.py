@@ -64,7 +64,7 @@ parser.add_argument("--catalog", type=str, default='bg_data', help="True if the 
 parser.add_argument("--window_function", type=lambda x: bool(strtobool(x)), default=False, help="Indicate whether to compute the spectral window")
 
 parser.add_argument('--rm_outliers',type=lambda x: bool(strtobool(x)),
-                   default=False, help="If true, extreme outliers (uncertainties in the magnitudes) in the lightcurve will be removed")
+                   default=True, help="If true, extreme outliers (uncertainties in the magnitudes) in the lightcurve will be removed")
 
 parser.add_argument('--optimise_frequency',type=lambda x: bool(strtobool(x)),
                    default=False, help="Optimise resulting lomb-scargle dominant frequency")
