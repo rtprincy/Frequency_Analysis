@@ -15,20 +15,41 @@ from distutils.util import strtobool
 import pwkit.pdm as pdm
 
 
-def theta_f(periods,mag,magerr,mjd):
-    theta_array=np.zeros(periods.size)
+def theta_f(periods, mag, magerr, mjd, chunk_size=1000):
+    num_periods = len(periods)
+    theta_array = np.zeros(num_periods)
     
-    i=0
-    for p in range(periods.size):
-        phi=(mjd/periods[p])
-        nphi = phi.astype(np.int64)  
-        phi = phi - nphi
-        idx=np.argsort(phi)
-        m=mag[idx]
-        merr=magerr[idx]
-        w=1/(merr[1:]**2 + merr[:-1]**2)
-        theta_array[i]=np.sum(w*(m[1:] - m[:-1])**2)/(np.sum((m[1:]-np.mean(m[1:]))**2)*np.sum(w))
-        i+=1
+    for start in range(0, num_periods, chunk_size):
+        end = min(start + chunk_size, num_periods)
+        
+        chunk_periods = periods[start:end]
+        chunk_theta = np.zeros_like(chunk_periods)
+        chunk_mag = np.tile(mag, (len(chunk_periods), 1))
+        chunk_magerr = np.tile(magerr, (len(chunk_periods), 1))
+        chunk_mjd = np.tile(mjd, (len(chunk_periods), 1))
+        
+        phi = chunk_mjd / chunk_periods[:, np.newaxis]
+        phi -= np.floor(phi)
+        
+        sorted_mag = np.zeros_like(chunk_mag)
+        sorted_magerr = np.zeros_like(chunk_magerr)
+        
+        for i in range(len(chunk_periods)):
+            idx = np.argsort(phi[i])
+            sorted_mag[i] = chunk_mag[i, idx]
+            sorted_magerr[i] = chunk_magerr[i, idx]
+        
+        diff_mag = sorted_mag[:, 1:] - sorted_mag[:, :-1]
+        diff_magerr = sorted_magerr[:, 1:]**2 + sorted_magerr[:, :-1]**2
+        w = 1 / diff_magerr
+        
+        numerator = np.sum(w * diff_mag**2, axis=1)
+        mean_mag = np.mean(sorted_mag[:, 1:], axis=1, keepdims=True)
+        denominator = np.sum((sorted_mag[:, 1:] - mean_mag)**2, axis=1) * np.sum(w, axis=1)
+        chunk_theta = numerator / denominator
+        
+        theta_array[start:end] = chunk_theta
+        
     return theta_array
 
 
@@ -197,3 +218,19 @@ def parse_input(input_str):
     else:
         # If it's not a file path, treat it as a single value
         return [input_str]
+        
+def theta_f_old_version(periods,mag,magerr,mjd):
+    theta_array=np.zeros(periods.size)
+    
+    i=0
+    for p in range(periods.size):
+        phi=(mjd/periods[p])
+        nphi = phi.astype(np.int64)  
+        phi = phi - nphi
+        idx=np.argsort(phi)
+        m=mag[idx]
+        merr=magerr[idx]
+        w=1/(merr[1:]**2 + merr[:-1]**2)
+        theta_array[i]=np.sum(w*(m[1:] - m[:-1])**2)/(np.sum((m[1:]-np.mean(m[1:]))**2)*np.sum(w))
+        i+=1
+    return theta_array
