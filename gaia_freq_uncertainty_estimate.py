@@ -122,7 +122,3 @@ for source in tqdm.tqdm(source_id):
         data[err_col][data['source_id']==int(source)]=eperiod
         idx=data[meas_col][data['source_id']==int(source)].index[0]
         data[meas_col].iloc[idx]=freq_sample
-
-        
-
-data.to_csv('hot_hsd_Culpan_plots_frac_plx_ruwe.csv',index=None)
