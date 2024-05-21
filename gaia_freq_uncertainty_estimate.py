@@ -77,7 +77,7 @@ for source in tqdm.tqdm(source_id):
         
         #Here we take 10 steps before and after the frequency peak as a new frequency search range. 
         
-        lower_range=peak_freq - oversampling_factor*f_step 
+        lower_range=max(0,peak_freq - oversampling_factor*f_step)
         upper_range=peak_freq + oversampling_factor*f_step
 
         fine_grid_freq=freq_grid(Time,oversample_factor=100,f0=lower_range,fn=upper_range)
@@ -115,7 +115,7 @@ for source in tqdm.tqdm(source_id):
     
         # Frequency and period uncertainties estimate
         
-        efreq=np.std(temp) 
+        efreq=np.std(freq_sample) 
         eperiod=efreq/(best_freq**2)
     
         #####################################################################
