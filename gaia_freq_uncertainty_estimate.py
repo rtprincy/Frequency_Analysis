@@ -94,6 +94,8 @@ for source in tqdm.tqdm(source_id):
         data[opt_period_col][data['source_id']==int(source)]=best_period
     
         freq_sample=np.zeros(Nsample)
+        
+        epsilon_step = fine_grid_step/Nsample
     
         # Draw samples from a gaussian distribution around the error and add it to the original magnitude
         # The periodogram is calculated around the frequency peak not the full frequency range, i.e., using fine_grid_freq
@@ -111,6 +113,8 @@ for source in tqdm.tqdm(source_id):
                 psi_=2*lsp_/theta_
             
                 freq_sample[i]=fine_grid_freq[np.argmax(psi_)]
+
+                fine_grid_freq+=epsilon_step
     
     
         # Frequency and period uncertainties estimate
